@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: #f7f5f0;
+  color: #1b1b1b;
+  font-family: ui-serif, "Georgia", "Times New Roman", serif;
+}
