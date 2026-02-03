@@ -1,18 +1,8 @@
-export type CreateAppSessionParams = {
-  protocol: "NitroRPC/0.5";
-  participants: [string, string];
-  weights: [number, number];
-  quorum: number;
-  challengeSeconds: number;
-  nonce: number;
-  application: string;
-};
+import type { RPCAppDefinition, RPCAppSessionAllocation } from "@erc7824/nitrolite";
 
-export type AppSessionAllocation = {
-  participant: string;
-  asset: string;
-  amount: string;
-};
+export type CreateAppSessionParams = RPCAppDefinition;
+
+export type AppSessionAllocation = RPCAppSessionAllocation;
 
 export type CreateAppSessionPayload = {
   definition: CreateAppSessionParams;
