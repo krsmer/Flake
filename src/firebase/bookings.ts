@@ -5,9 +5,8 @@ import { getFirebaseClient } from "./client";
 export type CreateBookingInput = {
   providerId: string;
   serviceId: string;
+  slotId: string;
   customerWallet: string;
-  startTime: string;
-  endTime: string;
   depositAmountUsdc: string;
   appSessionId?: string;
 };
@@ -39,4 +38,3 @@ export async function completeBooking(input: {
   const res = await fn(input);
   return res.data as any;
 }
-

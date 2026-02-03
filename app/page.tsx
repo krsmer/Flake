@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { createBooking } from "../src/firebase/bookings";
 import {
   listBookingsByCustomer,
+  listOpenSlots,
   listProviders,
   listServices,
   type ProviderDoc,
-  type ServiceDoc
+  type ServiceDoc,
+  type SlotDoc
 } from "../src/firebase/data";
 
 export default function HomePage() {
@@ -19,8 +21,9 @@ export default function HomePage() {
   const [services, setServices] = useState<ServiceDoc[]>([]);
   const [providerId, setProviderId] = useState("");
   const [serviceId, setServiceId] = useState("");
+  const [slots, setSlots] = useState<SlotDoc[]>([]);
+  const [slotId, setSlotId] = useState("");
   const [customerWallet, setCustomerWallet] = useState("0xCUSTOMER");
-  const [startTime, setStartTime] = useState("");
   const [bookings, setBookings] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [loadingBookings, setLoadingBookings] = useState(false);
@@ -52,6 +55,18 @@ export default function HomePage() {
       })
       .catch(() => setServices([]));
   }, [providerId, serviceId]);
+
+  useEffect(() => {
+    if (!providerId) return;
+    listOpenSlots(providerId)
+      .then((rows) => {
+        setSlots(rows);
+        if (!slotId && rows[0]) {
+          setSlotId(rows[0].id);
+        }
+      })
+      .catch(() => setSlots([]));
+  }, [providerId, slotId]);
 
   function choose(nextRole: "customer" | "provider") {
     window.localStorage.setItem("role", nextRole);
@@ -98,19 +113,13 @@ export default function HomePage() {
     setMsg(null);
     try {
       if (!selectedService) throw new Error("Select a service");
-      if (!startTime) throw new Error("Select a start time");
-
-      const startIso = new Date(startTime).toISOString();
-      const endIso = new Date(
-        new Date(startTime).getTime() + selectedService.durationMinutes * 60 * 1000
-      ).toISOString();
+      if (!slotId) throw new Error("Select a slot");
 
       const res = await createBooking({
         providerId,
         serviceId: selectedService.id,
+        slotId,
         customerWallet,
-        startTime: startIso,
-        endTime: endIso,
         depositAmountUsdc: calcDeposit(selectedService)
       });
 
@@ -222,14 +231,19 @@ export default function HomePage() {
               </label>
 
               <label className="text-xs uppercase tracking-wide" style={{ color: "var(--accent)" }}>
-                Start Time
-                <input
-                  type="datetime-local"
+                Slot
+                <select
                   className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
                   style={{ borderColor: "var(--border)", background: "transparent" }}
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                />
+                  value={slotId}
+                  onChange={(e) => setSlotId(e.target.value)}
+                >
+                  {slots.map((slot) => (
+                    <option key={slot.id} value={slot.id}>
+                      {new Date(slot.startTime).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
 

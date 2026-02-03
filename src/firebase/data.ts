@@ -32,6 +32,7 @@ export type BookingDoc = {
   id: string;
   providerId: string;
   serviceId: string;
+  slotId?: string;
   customerWallet: string;
   startTime: string;
   endTime: string;
@@ -78,6 +79,40 @@ export async function listBookingsByCustomer(
   const q = query(
     collection(db, "bookings"),
     where("customerWallet", "==", customerWallet),
+    orderBy("startTime", "asc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+}
+
+export type SlotDoc = {
+  id: string;
+  providerId: string;
+  serviceId: string;
+  startTime: string;
+  endTime: string;
+  status: "open" | "booked";
+};
+
+export async function listOpenSlots(providerId: string): Promise<SlotDoc[]> {
+  const { db } = getFirebaseClient();
+  const q = query(
+    collection(db, "slots"),
+    where("providerId", "==", providerId),
+    where("status", "==", "open"),
+    orderBy("startTime", "asc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+}
+
+export async function listSlotsByProvider(
+  providerId: string
+): Promise<SlotDoc[]> {
+  const { db } = getFirebaseClient();
+  const q = query(
+    collection(db, "slots"),
+    where("providerId", "==", providerId),
     orderBy("startTime", "asc")
   );
   const snap = await getDocs(q);

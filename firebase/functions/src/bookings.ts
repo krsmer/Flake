@@ -1,28 +1,41 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 
 import { computeAuditHash, writeOnChainAuditLogPlaceholder } from "./audit";
-import { collections } from "./db";
-import type { BookingDoc, BookingOutcome } from "./types";
+import { collections, db } from "./db";
+import type { BookingDoc, BookingOutcome, SlotDoc } from "./types";
 
 export async function createBooking(_req: CallableRequest) {
   const data = (_req.data ?? {}) as Record<string, unknown>;
   const providerId = String(data.providerId || "");
   const serviceId = String(data.serviceId || "");
   const customerWallet = String(data.customerWallet || "");
-  const startTime = String(data.startTime || "");
-  const endTime = String(data.endTime || "");
+  const slotId = data.slotId ? String(data.slotId) : "";
   const depositAmountUsdc = String(data.depositAmountUsdc || "");
   const appSessionId = data.appSessionId ? String(data.appSessionId) : undefined;
 
-  if (!providerId || !serviceId || !customerWallet || !startTime || !endTime || !depositAmountUsdc) {
+  if (!providerId || !serviceId || !customerWallet || !slotId || !depositAmountUsdc) {
     throw new Error("Missing required fields");
   }
 
-  // MVP: deadlines are simple fixed offsets; later we can make these configurable per provider/service.
+  const slotRef = collections.slots().doc(slotId);
+  const slotSnap = await slotRef.get();
+  if (!slotSnap.exists) {
+    throw new Error("Slot not found");
+  }
+  const slot = slotSnap.data() as SlotDoc;
+  if (slot.status !== "open") {
+    throw new Error("Slot is not available");
+  }
+  if (slot.providerId !== providerId || slot.serviceId !== serviceId) {
+    throw new Error("Slot/provider/service mismatch");
+  }
+
+  const startTime = slot.startTime;
+  const endTime = slot.endTime;
   const startMs = Date.parse(startTime);
   const endMs = Date.parse(endTime);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-    throw new Error("Invalid startTime/endTime");
+    throw new Error("Invalid slot time range");
   }
 
   const cancelDeadline = new Date(startMs - 24 * 60 * 60 * 1000).toISOString();
@@ -32,6 +45,7 @@ export async function createBooking(_req: CallableRequest) {
   const booking: BookingDoc = {
     providerId,
     serviceId,
+    slotId,
     customerWallet,
     startTime,
     endTime,
@@ -48,8 +62,12 @@ export async function createBooking(_req: CallableRequest) {
   booking.auditHash = auditHash;
   writeOnChainAuditLogPlaceholder(auditHash);
 
-  const ref = await collections.bookings().add(booking);
-  return { ok: true, bookingId: ref.id, auditHash };
+  const batch = db.batch();
+  const bookingRef = collections.bookings().doc();
+  batch.set(bookingRef, booking);
+  batch.update(slotRef, { status: "booked", updatedAt: now });
+  await batch.commit();
+  return { ok: true, bookingId: bookingRef.id, auditHash };
 }
 
 export async function cancelBooking(_req: CallableRequest) {

@@ -26,6 +26,7 @@ export type ServiceDoc = {
 export type BookingDoc = {
   providerId: string;
   serviceId: string;
+  slotId?: string;
   customerWallet: string;
   startTime: string;
   endTime: string;
@@ -40,3 +41,14 @@ export type BookingDoc = {
   updatedAt: string;
 };
 
+export type SlotStatus = "open" | "booked";
+
+export type SlotDoc = {
+  providerId: string;
+  serviceId: string;
+  startTime: string;
+  endTime: string;
+  status: SlotStatus;
+  createdAt: string;
+  updatedAt: string;
+};
