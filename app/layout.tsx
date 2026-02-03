@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "No-Flake Booking",
+  title: "Flake",
   description: "Deposit-based booking MVP"
 };
 
