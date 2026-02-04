@@ -10,14 +10,12 @@ export type ProviderDoc = {
 
 export type ServiceDepositRule =
   | { type: "fixed"; amountUsdc: string }
-  | { type: "percent"; percent: number; minUsdc?: string; maxUsdc?: string }
   | { type: "by_duration"; perMinuteUsdc: string; minUsdc?: string; maxUsdc?: string };
 
 export type ServiceDoc = {
   providerId: string;
   name: string;
   durationMinutes: number;
-  priceUsdc: string;
   depositRule: ServiceDepositRule;
   createdAt: string;
   updatedAt: string;
@@ -36,6 +34,9 @@ export type BookingDoc = {
   cancelDeadline: string;
   decisionDeadline: string;
   appSessionId?: string;
+  settlementStatus?: "pending" | "settled" | "failed";
+  settlementTxHash?: string;
+  settlementError?: string;
   auditHash?: string;
   createdAt: string;
   updatedAt: string;

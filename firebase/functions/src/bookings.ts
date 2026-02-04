@@ -1,8 +1,9 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 
-import { computeAuditHash, writeOnChainAuditLogPlaceholder } from "./audit";
-import { collections, db } from "./db";
-import type { BookingDoc, BookingOutcome, SlotDoc } from "./types";
+import { computeAuditHash, writeOnChainAuditLogPlaceholder } from "./audit.js";
+import { collections, db } from "./db.js";
+import type { BookingDoc, BookingOutcome, SlotDoc } from "./types.js";
+import { runYellowSettlement } from "./yellow.js";
 
 export async function createBooking(_req: CallableRequest) {
   const data = (_req.data ?? {}) as Record<string, unknown>;
@@ -11,27 +12,41 @@ export async function createBooking(_req: CallableRequest) {
   const customerWallet = String(data.customerWallet || "");
   const slotId = data.slotId ? String(data.slotId) : "";
   const depositAmountUsdc = String(data.depositAmountUsdc || "");
+  const startTimeInput = data.startTime ? String(data.startTime) : "";
+  const endTimeInput = data.endTime ? String(data.endTime) : "";
   const appSessionId = data.appSessionId ? String(data.appSessionId) : undefined;
 
-  if (!providerId || !serviceId || !customerWallet || !slotId || !depositAmountUsdc) {
+  if (!providerId || !serviceId || !customerWallet || !depositAmountUsdc) {
     throw new Error("Missing required fields");
   }
 
-  const slotRef = collections.slots().doc(slotId);
-  const slotSnap = await slotRef.get();
-  if (!slotSnap.exists) {
-    throw new Error("Slot not found");
-  }
-  const slot = slotSnap.data() as SlotDoc;
-  if (slot.status !== "open") {
-    throw new Error("Slot is not available");
-  }
-  if (slot.providerId !== providerId || slot.serviceId !== serviceId) {
-    throw new Error("Slot/provider/service mismatch");
+  let startTime = "";
+  let endTime = "";
+  let slotRef: FirebaseFirestore.DocumentReference | null = null;
+
+  if (slotId) {
+    slotRef = collections.slots().doc(slotId);
+    const slotSnap = await slotRef.get();
+    if (!slotSnap.exists) {
+      throw new Error("Slot not found");
+    }
+    const slot = slotSnap.data() as SlotDoc;
+    if (slot.status !== "open") {
+      throw new Error("Slot is not available");
+    }
+    if (slot.providerId !== providerId || slot.serviceId !== serviceId) {
+      throw new Error("Slot/provider/service mismatch");
+    }
+    startTime = slot.startTime;
+    endTime = slot.endTime;
+  } else {
+    if (!startTimeInput || !endTimeInput) {
+      throw new Error("Missing startTime/endTime");
+    }
+    startTime = startTimeInput;
+    endTime = endTimeInput;
   }
 
-  const startTime = slot.startTime;
-  const endTime = slot.endTime;
   const startMs = Date.parse(startTime);
   const endMs = Date.parse(endTime);
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
@@ -45,7 +60,7 @@ export async function createBooking(_req: CallableRequest) {
   const booking: BookingDoc = {
     providerId,
     serviceId,
-    slotId,
+    slotId: slotId || undefined,
     customerWallet,
     startTime,
     endTime,
@@ -65,8 +80,34 @@ export async function createBooking(_req: CallableRequest) {
   const batch = db.batch();
   const bookingRef = collections.bookings().doc();
   batch.set(bookingRef, booking);
-  batch.update(slotRef, { status: "booked", updatedAt: now });
+  if (slotRef) {
+    batch.update(slotRef, { status: "booked", updatedAt: now });
+  }
   await batch.commit();
+
+  try {
+    await bookingRef.update({ settlementStatus: "pending" });
+    const yellowResult = await runYellowSettlement({
+      bookingId: bookingRef.id,
+      depositAmountUsdc
+    });
+    const rawSettlement = (yellowResult as any).settlementResult;
+    const settlementTxHash =
+      typeof rawSettlement === "string"
+        ? rawSettlement
+        : String(rawSettlement?.hash ?? rawSettlement?.transactionHash ?? "");
+    await bookingRef.update({
+      appSessionId: yellowResult.appSessionId,
+      settlementStatus: "settled",
+      settlementTxHash
+    });
+  } catch (err: any) {
+    await bookingRef.update({
+      settlementStatus: "failed",
+      settlementError: err?.message ?? "yellow settlement failed"
+    });
+  }
+
   return { ok: true, bookingId: bookingRef.id, auditHash };
 }
 

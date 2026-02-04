@@ -6,6 +6,11 @@
     {
       "source": "firebase/functions"
     }
-  ]
+  ],
+  "emulators": {
+    "hub": { "port": 4401 },
+    "ui": { "port": 4001 },
+    "logging": { "port": 4501 },
+    "functions": { "port": 5001 }
+  }
 }
-

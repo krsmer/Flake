@@ -1,7 +1,7 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 
-import { collections } from "./db";
-import type { SlotDoc } from "./types";
+import { collections } from "./db.js";
+import type { SlotDoc } from "./types.js";
 
 export async function createSlot(req: CallableRequest) {
   const data = (req.data ?? {}) as Record<string, unknown>;

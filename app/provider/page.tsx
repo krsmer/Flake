@@ -1,25 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { completeBooking } from "../../src/firebase/bookings";
-import { createSlot } from "../../src/firebase/slots";
+import { createService } from "../../src/firebase/services";
 import {
   listBookingsByProvider,
   listServices,
-  listSlotsByProvider,
-  type ServiceDoc,
-  type SlotDoc
+  type ServiceDoc
 } from "../../src/firebase/data";
 
 export default function ProviderPage() {
   const router = useRouter();
   const [providerId, setProviderId] = useState("prov_1");
+  const [providerName, setProviderName] = useState("Provider");
   const [services, setServices] = useState<ServiceDoc[]>([]);
-  const [serviceId, setServiceId] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [slots, setSlots] = useState<SlotDoc[]>([]);
+  const [serviceName, setServiceName] = useState("");
+  const [serviceDuration, setServiceDuration] = useState("60");
+  const [serviceDeposit, setServiceDeposit] = useState("5");
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -37,20 +36,7 @@ export default function ProviderPage() {
   }, [providerId]);
 
   useEffect(() => {
-    if (!providerId) return;
-    listServices(providerId)
-      .then((rows) => {
-        setServices(rows);
-        if (!serviceId && rows[0]) {
-          setServiceId(rows[0].id);
-        }
-      })
-      .catch(() => setServices([]));
-  }, [providerId, serviceId]);
-
-  useEffect(() => {
-    if (!providerId) return;
-    refreshSlots();
+    refreshServices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerId]);
 
@@ -66,39 +52,43 @@ export default function ProviderPage() {
     }
   }
 
-  async function refreshSlots() {
+  async function refreshServices() {
+    if (!providerId) return;
     try {
-      const rows = await listSlotsByProvider(providerId);
-      setSlots(rows);
+      const rows = await listServices(providerId);
+      setServices(rows);
+      // no-op: keep list for display
     } catch (e: any) {
-      setMsg(e?.message ?? "Failed to load slots");
+      setServices([]);
+      setMsg(e?.message ?? "Failed to load services");
     }
   }
 
-  const selectedService = useMemo(
-    () => services.find((service) => service.id === serviceId) || null,
-    [services, serviceId]
-  );
-
-  async function createProviderSlot() {
+  async function createProviderService() {
     setMsg(null);
     try {
-      if (!selectedService) throw new Error("Select a service");
-      if (!startTime) throw new Error("Select a start time");
-      const startIso = new Date(startTime).toISOString();
-      const endIso = new Date(
-        new Date(startTime).getTime() + 60 * 60 * 1000
-      ).toISOString();
-      await createSlot({
+      const durationMinutes = Number(serviceDuration);
+      if (!providerId) throw new Error("Provider ID is required");
+      if (!providerName) throw new Error("Provider name is required");
+      if (!serviceName) throw new Error("Service name is required");
+      if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+        throw new Error("Invalid duration");
+      }
+      if (!serviceDeposit) throw new Error("Deposit is required");
+
+      await createService({
         providerId,
-        serviceId: selectedService.id,
-        startTime: startIso,
-        endTime: endIso
+        providerName,
+        serviceName,
+        durationMinutes,
+        depositRule: { type: "fixed", amountUsdc: serviceDeposit }
       });
-      setStartTime("");
-      await refreshSlots();
+
+      setServiceName("");
+      await refreshServices();
+      setMsg("Service created");
     } catch (e: any) {
-      setMsg(e?.message ?? "Failed to create slot");
+      setMsg(e?.message ?? "Failed to create service");
     }
   }
 
@@ -139,6 +129,15 @@ export default function ProviderPage() {
                   onChange={(e) => setProviderId(e.target.value)}
                 />
               </label>
+              <label className="text-xs uppercase tracking-wide" style={{ color: "var(--accent)" }}>
+                Provider Name
+                <input
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", background: "transparent" }}
+                  value={providerName}
+                  onChange={(e) => setProviderName(e.target.value)}
+                />
+              </label>
               <div className="flex items-end">
                 <button
                   className="rounded-xl border px-4 py-3 text-sm font-semibold"
@@ -163,37 +162,42 @@ export default function ProviderPage() {
         <section className="rounded-3xl border p-8 sm:p-10" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
           <div className="flex flex-col gap-6">
             <div>
-              <h2 className="text-lg font-semibold">Create Slot</h2>
+              <h2 className="text-lg font-semibold">Create Service</h2>
               <p className="mt-2 text-sm" style={{ color: "var(--accent)" }}>
-                Add a 60-minute slot for students to book.
+                Add a service that students can book.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-xs uppercase tracking-wide" style={{ color: "var(--accent)" }}>
-                Service
-                <select
+                Service Name
+                <input
                   className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
                   style={{ borderColor: "var(--border)", background: "transparent" }}
-                  value={serviceId}
-                  onChange={(e) => setServiceId(e.target.value)}
-                >
-                  {services.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name}
-                    </option>
-                  ))}
-                </select>
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                />
               </label>
 
               <label className="text-xs uppercase tracking-wide" style={{ color: "var(--accent)" }}>
-                Start Time
+                Duration (minutes)
                 <input
-                  type="datetime-local"
                   className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
                   style={{ borderColor: "var(--border)", background: "transparent" }}
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  value={serviceDuration}
+                  onChange={(e) => setServiceDuration(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="text-xs uppercase tracking-wide" style={{ color: "var(--accent)" }}>
+                Deposit (USDC)
+                <input
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", background: "transparent" }}
+                  value={serviceDeposit}
+                  onChange={(e) => setServiceDeposit(e.target.value)}
                 />
               </label>
             </div>
@@ -202,25 +206,24 @@ export default function ProviderPage() {
               className="rounded-xl border px-4 py-3 text-sm font-semibold"
               style={{ borderColor: "var(--accent-2)", background: "var(--accent-3)" }}
               type="button"
-              onClick={createProviderSlot}
+              onClick={createProviderService}
             >
-              Create Slot
+              Create Service
             </button>
 
-            {slots.length > 0 && (
+            {services.length > 0 && (
               <div className="space-y-2">
-                {slots.map((slot) => (
+                {services.map((service) => (
                   <div
-                    key={slot.id}
+                    key={service.id}
                     className="rounded-xl border px-4 py-3 text-xs"
                     style={{ borderColor: "var(--border)", color: "var(--accent)" }}
                   >
                     <div className="flex items-center justify-between" style={{ color: "var(--text)" }}>
-                      <span>{slot.serviceId}</span>
-                      <span style={{ color: "var(--accent)" }}>{slot.status}</span>
+                      <span>{service.name}</span>
                     </div>
                     <div className="mt-1" style={{ color: "var(--accent)" }}>
-                      {new Date(slot.startTime).toLocaleString()}
+                      {service.durationMinutes} min
                     </div>
                   </div>
                 ))}
@@ -249,6 +252,26 @@ export default function ProviderPage() {
                 <div className="mt-1 text-xs" style={{ color: "var(--accent)" }}>
                   {booking.startTime}
                 </div>
+                {booking.appSessionId && (
+                  <div className="mt-1 text-xs" style={{ color: "var(--accent)" }}>
+                    App Session: {booking.appSessionId}
+                  </div>
+                )}
+                {booking.settlementStatus && (
+                  <div className="mt-1 text-xs" style={{ color: "var(--accent)" }}>
+                    Settlement: {booking.settlementStatus}
+                  </div>
+                )}
+                {booking.settlementTxHash && (
+                  <div className="mt-1 text-xs" style={{ color: "var(--accent)" }}>
+                    Tx: {booking.settlementTxHash}
+                  </div>
+                )}
+                {booking.settlementError && (
+                  <div className="mt-1 text-xs" style={{ color: "var(--accent)" }}>
+                    Error: {booking.settlementError}
+                  </div>
+                )}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <button
                     className="rounded-xl border px-3 py-2 text-xs font-semibold"

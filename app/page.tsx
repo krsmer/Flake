@@ -6,12 +6,10 @@ import { useRouter } from "next/navigation";
 import { createBooking } from "../src/firebase/bookings";
 import {
   listBookingsByCustomer,
-  listOpenSlots,
   listProviders,
   listServices,
   type ProviderDoc,
-  type ServiceDoc,
-  type SlotDoc
+  type ServiceDoc
 } from "../src/firebase/data";
 
 export default function HomePage() {
@@ -21,8 +19,7 @@ export default function HomePage() {
   const [services, setServices] = useState<ServiceDoc[]>([]);
   const [providerId, setProviderId] = useState("");
   const [serviceId, setServiceId] = useState("");
-  const [slots, setSlots] = useState<SlotDoc[]>([]);
-  const [slotId, setSlotId] = useState("");
+  const [startTime, setStartTime] = useState("");
   const [customerWallet, setCustomerWallet] = useState("0xCUSTOMER");
   const [bookings, setBookings] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
@@ -56,18 +53,6 @@ export default function HomePage() {
       .catch(() => setServices([]));
   }, [providerId, serviceId]);
 
-  useEffect(() => {
-    if (!providerId) return;
-    listOpenSlots(providerId)
-      .then((rows) => {
-        setSlots(rows);
-        if (!slotId && rows[0]) {
-          setSlotId(rows[0].id);
-        }
-      })
-      .catch(() => setSlots([]));
-  }, [providerId, slotId]);
-
   function choose(nextRole: "customer" | "provider") {
     window.localStorage.setItem("role", nextRole);
     setRole(nextRole);
@@ -83,13 +68,6 @@ export default function HomePage() {
     if (!service) return "0";
     const rule = service.depositRule;
     if (rule.type === "fixed") return rule.amountUsdc;
-    if (rule.type === "percent") {
-      const raw = (Number(service.priceUsdc) * rule.percent) / 100;
-      let value = raw;
-      if (rule.minUsdc) value = Math.max(value, Number(rule.minUsdc));
-      if (rule.maxUsdc) value = Math.min(value, Number(rule.maxUsdc));
-      return value.toFixed(2);
-    }
     const raw = Number(rule.perMinuteUsdc) * service.durationMinutes;
     let value = raw;
     if (rule.minUsdc) value = Math.max(value, Number(rule.minUsdc));
@@ -113,14 +91,19 @@ export default function HomePage() {
     setMsg(null);
     try {
       if (!selectedService) throw new Error("Select a service");
-      if (!slotId) throw new Error("Select a slot");
+      if (!startTime) throw new Error("Select a start time");
+      const startIso = new Date(startTime).toISOString();
+      const endIso = new Date(
+        new Date(startTime).getTime() + selectedService.durationMinutes * 60 * 1000
+      ).toISOString();
 
       const res = await createBooking({
         providerId,
         serviceId: selectedService.id,
-        slotId,
         customerWallet,
-        depositAmountUsdc: calcDeposit(selectedService)
+        depositAmountUsdc: calcDeposit(selectedService),
+        startTime: startIso,
+        endTime: endIso
       });
 
       setMsg(`Created booking: ${res.bookingId ?? "OK"}`);
@@ -231,19 +214,14 @@ export default function HomePage() {
               </label>
 
               <label className="text-xs uppercase tracking-wide" style={{ color: "var(--accent)" }}>
-                Slot
-                <select
+                Start Time
+                <input
+                  type="datetime-local"
                   className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
                   style={{ borderColor: "var(--border)", background: "transparent" }}
-                  value={slotId}
-                  onChange={(e) => setSlotId(e.target.value)}
-                >
-                  {slots.map((slot) => (
-                    <option key={slot.id} value={slot.id}>
-                      {new Date(slot.startTime).toLocaleString()}
-                    </option>
-                  ))}
-                </select>
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
               </label>
             </div>
 
@@ -304,6 +282,26 @@ export default function HomePage() {
                     <div className="mt-1" style={{ color: "var(--accent)" }}>
                       {booking.startTime}
                     </div>
+                    {booking.appSessionId && (
+                      <div className="mt-1" style={{ color: "var(--accent)" }}>
+                        App Session: {booking.appSessionId}
+                      </div>
+                    )}
+                    {booking.settlementStatus && (
+                      <div className="mt-1" style={{ color: "var(--accent)" }}>
+                        Settlement: {booking.settlementStatus}
+                      </div>
+                    )}
+                    {booking.settlementTxHash && (
+                      <div className="mt-1" style={{ color: "var(--accent)" }}>
+                        Tx: {booking.settlementTxHash}
+                      </div>
+                    )}
+                    {booking.settlementError && (
+                      <div className="mt-1" style={{ color: "var(--accent)" }}>
+                        Error: {booking.settlementError}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

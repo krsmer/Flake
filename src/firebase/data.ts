@@ -10,7 +10,6 @@ import { getFirebaseClient } from "./client";
 
 export type ServiceDepositRule =
   | { type: "fixed"; amountUsdc: string }
-  | { type: "percent"; percent: number; minUsdc?: string; maxUsdc?: string }
   | { type: "by_duration"; perMinuteUsdc: string; minUsdc?: string; maxUsdc?: string };
 
 export type ProviderDoc = {
@@ -24,7 +23,6 @@ export type ServiceDoc = {
   providerId: string;
   name: string;
   durationMinutes: number;
-  priceUsdc: string;
   depositRule: ServiceDepositRule;
 };
 
@@ -39,6 +37,10 @@ export type BookingDoc = {
   depositAmountUsdc: string;
   status: string;
   outcome?: string;
+  appSessionId?: string;
+  settlementStatus?: "pending" | "settled" | "failed";
+  settlementTxHash?: string;
+  settlementError?: string;
   createdAt: string;
 };
 

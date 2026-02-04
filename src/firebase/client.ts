@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getFunctions } from "firebase/functions";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getFirestore } from "firebase/firestore";
 
 type FirebaseClient = {
@@ -18,8 +18,13 @@ export function getFirebaseClient(): FirebaseClient {
           appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
         });
 
+  const functions = getFunctions(app);
+  if (process.env.NEXT_PUBLIC_USE_EMULATORS === "true") {
+    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  }
+
   return {
-    functions: getFunctions(app),
+    functions,
     db: getFirestore(app)
   };
 }

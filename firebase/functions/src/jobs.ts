@@ -1,9 +1,9 @@
 import type { CallableRequest } from "firebase-functions/v2/https";
 import type { ScheduledEvent } from "firebase-functions/v2/scheduler";
 
-import { computeAuditHash, writeOnChainAuditLogPlaceholder } from "./audit";
-import { collections, db } from "./db";
-import type { BookingDoc } from "./types";
+import { computeAuditHash, writeOnChainAuditLogPlaceholder } from "./audit.js";
+import { collections, db } from "./db.js";
+import type { BookingDoc } from "./types.js";
 
 type ResolveExpiredResult = {
   ok: true;

@@ -5,9 +5,11 @@ import { getFirebaseClient } from "./client";
 export type CreateBookingInput = {
   providerId: string;
   serviceId: string;
-  slotId: string;
   customerWallet: string;
   depositAmountUsdc: string;
+  slotId?: string;
+  startTime?: string;
+  endTime?: string;
   appSessionId?: string;
 };
 
